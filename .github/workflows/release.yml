@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  GIT_USER_EMAIL: ${{ vars.GIT_USER_EMAIL }}
+  GIT_USER_NAME: ${{ vars.GIT_USER_NAME }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  RELEASE_IT_PUSH_REPO: git@github.com:${{ github.repository }}.git
+  PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: false
+
+jobs:
+  pr:
+    name: Detect PR merge
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      merged: ${{ steps.detect.outputs.merged }}
+    steps:
+      - id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          merged=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq \
+            "any(.[]; .merged_at != null and .merge_commit_sha == \"$GITHUB_SHA\" and .base.ref == \"$GITHUB_REF_NAME\")") || exit 0
+          echo "merged=$merged" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: pr
+    # The master ruleset requires Check before merging a PR.
+    if: ${{ !cancelled() && needs.pr.outputs.merged != 'true' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check.yml
+
+  release:
+    name: Release
+    needs: [pr, check]
+    if: ${{ !cancelled() && (needs.pr.outputs.merged == 'true' || needs.check.result == 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@26
+          install: false
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: github.com
+
+      - name: Configure git
+        run: |
+          git config user.name "$GIT_USER_NAME"
+          git config user.email "$GIT_USER_EMAIL"
+
+      - name: Release
+        id: release
+        run: pnpm release
+
+      - name: Notify release succeeded
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pnpm ga:notify success "[@b12k/module-boundaries-plugin] Release succeeded."
+
+      - name: Notify release failed
+        if: failure() && steps.release.outcome != 'success'
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pnpm ga:notify error "[@b12k/module-boundaries-plugin] Release failed."

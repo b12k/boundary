@@ -1,0 +1,80 @@
+{
+  "name": "@b12k/module-boundaries-plugin",
+  "version": "0.0.0",
+  "description": "Module boundary rules for ESLint and Oxlint",
+  "keywords": [
+    "eslint",
+    "eslint-plugin",
+    "module-boundaries",
+    "oxlint"
+  ],
+  "license": "MIT",
+  "author": "Bogdan Kolesnyk",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b12k/module-boundaries-plugin.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rslib",
+    "check": "run-p -l check:*",
+    "check:format": "oxfmt . --check",
+    "check:scripts": "oxlint",
+    "check:types": "tsc --noEmit",
+    "check:tests": "rstest run",
+    "deps:check": "ncu -e 2 -c 1",
+    "deps:update": "ncu -du --dep prod,dev,optional --doctorInstall \"pnpm deps:update:install\" --doctorTest \"pnpm deps:update:doctor\" -c 1",
+    "deps:update:doctor": "run-p -l check:types check:scripts check:tests build",
+    "deps:update:install": "pnpm i --no-frozen-lockfile",
+    "dev": "rslib --watch",
+    "fix": "run-s -l fix:*",
+    "fix:format": "oxfmt . --write",
+    "fix:scripts": "oxlint --fix",
+    "ga:notify": "tsx .github/notify.ts",
+    "husky:commit-msg": "commitlint",
+    "husky:pre-commit": "lint-staged",
+    "husky:pre-push": "branch-name-lint",
+    "prepack": "run-p check build",
+    "prepare": "husky",
+    "release": "release-it",
+    "test": "rstest run"
+  },
+  "devDependencies": {
+    "@b12k/branch-name-lint": "1.3.0",
+    "@commitlint/config-conventional": "21.2.4",
+    "@release-it/conventional-changelog": "12.0.2",
+    "@rslib/core": "1.0.7",
+    "@rstest/core": "0.12.6",
+    "@types/node": "26.6.6",
+    "commitlint": "21.2.4",
+    "eslint-plugin-perfectionist": "5.14.0",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.2",
+    "npm-check-updates": "23.1.1",
+    "npm-run-all2": "9.1.0",
+    "oxfmt": "0.80.0",
+    "oxlint": "1.95.0",
+    "oxlint-tsgolint": "7.0.2008",
+    "release-it": "21.1.3",
+    "tsx": "4.23.15",
+    "type-fest": "6.0.3",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.23.0"
+}

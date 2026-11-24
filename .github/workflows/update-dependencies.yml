@@ -1,0 +1,108 @@
+name: Update dependencies
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: update-dependencies
+  cancel-in-progress: false
+
+env:
+  PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: false
+
+jobs:
+  update:
+    name: Update dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@26
+          install: false
+          cache: true
+
+      - name: Install dependencies
+        id: install
+        run: pnpm i --no-frozen-lockfile
+
+      - name: Update pnpm
+        run: |
+          trap 'git restore -- package.json pnpm-lock.yaml' ERR
+          pnpm exec ncu -u --dep packageManager -c 1
+          if ! git diff --quiet -- package.json; then
+            pnpm deps:update:install
+            pnpm deps:update:doctor
+          fi
+
+      - name: Update
+        id: update
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm deps:update && pnpm deps:check
+
+      - name: Check changes
+        if: always()
+        id: changes
+        run: |
+          if git diff --quiet -- package.json; then
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup SSH key
+        if: always() && steps.changes.outputs.updated == 'true'
+        id: ssh
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: github.com
+
+      - name: Commit
+        if: always() && steps.ssh.outcome == 'success'
+        env:
+          GIT_USER_EMAIL: ${{ vars.GIT_USER_EMAIL }}
+          GIT_USER_NAME: ${{ vars.GIT_USER_NAME }}
+        run: |
+          git remote set-url origin "git@github.com:$GITHUB_REPOSITORY.git"
+          git config user.name "$GIT_USER_NAME"
+          git config user.email "$GIT_USER_EMAIL"
+          git add .
+          git commit -m "feat: update dependencies"
+          git push --no-verify
+
+      - name: Notify updated
+        if: steps.changes.outputs.updated == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pnpm ga:notify success "[@b12k/module-boundaries-plugin] Dependencies updated."
+
+      - name: Notify dependencies not changed
+        if: steps.changes.outputs.updated == 'false'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pnpm ga:notify info "[@b12k/module-boundaries-plugin] Dependencies not changed."
+
+      - name: Notify warning
+        if: failure() && steps.changes.outputs.updated == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pnpm ga:notify warning "[@b12k/module-boundaries-plugin] Dependencies partially updated."
+
+      - name: Notify error
+        if: failure() && steps.changes.outputs.updated == 'false'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: pnpm ga:notify error "[@b12k/module-boundaries-plugin] Dependencies update failed."
