@@ -1,26 +1,26 @@
-# Module Boundaries
+# Boundary
 
 ESLint and Oxlint rules for modules whose public entry point is `index.ts` or `index.js`.
 
-Install the plugin with `pnpm add -D @b12k/module-boundaries-plugin`.
+Install the plugin with `pnpm add -D @b12k/boundary`.
 
 ## ESLint
 
 ```js
-import moduleBoundaries from '@b12k/module-boundaries-plugin';
+import boundary from '@b12k/boundary';
 
 export default [
   {
-    plugins: { 'module-boundaries': moduleBoundaries },
+    plugins: { boundary },
     rules: {
-      'module-boundaries/barrel-reexports-only': 'error',
-      'module-boundaries/no-deep-imports': 'error',
-      'module-boundaries/no-explicit-index': 'error',
-      'module-boundaries/no-export-star': 'error',
-      'module-boundaries/no-internal-barrel-imports': 'error',
-      'module-boundaries/no-parent-reexports': 'error',
-      'module-boundaries/no-shadowed-module-entry': 'error',
-      'module-boundaries/no-useless-barrel': 'error',
+      'boundary/barrel-reexports-only': 'error',
+      'boundary/no-deep-imports': 'error',
+      'boundary/no-explicit-index': 'error',
+      'boundary/no-export-star': 'error',
+      'boundary/no-internal-barrel-imports': 'error',
+      'boundary/no-parent-reexports': 'error',
+      'boundary/no-shadowed-module-entry': 'error',
+      'boundary/no-useless-barrel': 'error',
     },
   },
 ];
@@ -34,16 +34,16 @@ Add the plugin and rules to `.oxlintrc.json` or `oxlint.config.ts`.
 
 ```json
 {
-  "jsPlugins": [{ "name": "module-boundaries", "specifier": "@b12k/module-boundaries-plugin" }],
+  "jsPlugins": [{ "name": "boundary", "specifier": "@b12k/boundary" }],
   "rules": {
-    "module-boundaries/barrel-reexports-only": "error",
-    "module-boundaries/no-deep-imports": "error",
-    "module-boundaries/no-explicit-index": "error",
-    "module-boundaries/no-export-star": "error",
-    "module-boundaries/no-internal-barrel-imports": "error",
-    "module-boundaries/no-parent-reexports": "error",
-    "module-boundaries/no-shadowed-module-entry": "error",
-    "module-boundaries/no-useless-barrel": "error"
+    "boundary/barrel-reexports-only": "error",
+    "boundary/no-deep-imports": "error",
+    "boundary/no-explicit-index": "error",
+    "boundary/no-export-star": "error",
+    "boundary/no-internal-barrel-imports": "error",
+    "boundary/no-parent-reexports": "error",
+    "boundary/no-shadowed-module-entry": "error",
+    "boundary/no-useless-barrel": "error"
   }
 }
 ```

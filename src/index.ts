@@ -7,8 +7,8 @@ import { noParentReexports } from './no-parent-reexports';
 import { noShadowedModuleEntry } from './no-shadowed-module-entry';
 import { noUselessBarrel } from './no-useless-barrel';
 
-const moduleBoundaries = {
-  meta: { name: 'module-boundaries' },
+const boundary = {
+  meta: { name: 'boundary' },
   rules: {
     'barrel-reexports-only': barrelReexportsOnly,
     'no-deep-imports': noDeepImports,
@@ -22,4 +22,4 @@ const moduleBoundaries = {
 };
 
 // oxlint-disable-next-line import/no-default-export -- Both lint engines load the default plugin export.
-export default moduleBoundaries;
+export default boundary;

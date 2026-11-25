@@ -84,25 +84,25 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: pnpm ga:notify success "[@b12k/module-boundaries-plugin] Dependencies updated."
+        run: pnpm ga:notify success "[@b12k/boundary] Dependencies updated."
 
       - name: Notify dependencies not changed
         if: steps.changes.outputs.updated == 'false'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: pnpm ga:notify info "[@b12k/module-boundaries-plugin] Dependencies not changed."
+        run: pnpm ga:notify info "[@b12k/boundary] Dependencies not changed."
 
       - name: Notify warning
         if: failure() && steps.changes.outputs.updated == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: pnpm ga:notify warning "[@b12k/module-boundaries-plugin] Dependencies partially updated."
+        run: pnpm ga:notify warning "[@b12k/boundary] Dependencies partially updated."
 
       - name: Notify error
         if: failure() && steps.changes.outputs.updated == 'false'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: pnpm ga:notify error "[@b12k/module-boundaries-plugin] Dependencies update failed."
+        run: pnpm ga:notify error "[@b12k/boundary] Dependencies update failed."

@@ -8,9 +8,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-import moduleBoundaries from '../src/index';
+import boundary from '../src/index';
 
-type RuleName = keyof typeof moduleBoundaries.rules;
+type RuleName = keyof typeof boundary.rules;
 
 const FILES = [
   'src/mixed/index.js',
@@ -44,7 +44,7 @@ async function writeFixture(filename: string, contents: string) {
 }
 
 beforeAll(async () => {
-  root = await mkdtemp(path.join(tmpdir(), 'module-boundaries-'));
+  root = await mkdtemp(path.join(tmpdir(), 'boundary-'));
 
   await Promise.all([
     ...FILES.map((filename) => writeFixture(filename, '')),
@@ -71,8 +71,8 @@ function lint(rule: RuleName, filename: string, source: string) {
   const linter = new Linter({ cwd: root });
   const config: Linter.Config = {
     files: ['**/*.{js,ts,mjs}'],
-    plugins: { 'module-boundaries': moduleBoundaries },
-    rules: { [`module-boundaries/${rule}`]: 'error' },
+    plugins: { boundary },
+    rules: { [`boundary/${rule}`]: 'error' },
   };
   const options = { filename: path.join(root, filename) };
   return linter.verify(source, config, options);
@@ -158,9 +158,7 @@ it('loads the plugin in Oxlint and checks TypeScript re-exports and aliases acro
   const cli = path.join(path.dirname(resolve('oxlint/package.json')), 'bin/oxlint');
   const plugin = path.join(projectRoot, 'src/index.ts');
   const loader = pathToFileURL(resolve('tsx')).href;
-  const rules = Object.fromEntries(
-    Object.keys(moduleBoundaries.rules).map((rule) => [`module-boundaries/${rule}`, 'error']),
-  );
+  const rules = Object.fromEntries(Object.keys(boundary.rules).map((rule) => [`boundary/${rule}`, 'error']));
   await Promise.all([
     writeFixture('src/oxlint/consumer.ts', "import '@/oxlint/a/model';\nimport '@/oxlint/a/index';\n"),
     writeFixture(
@@ -170,14 +168,7 @@ it('loads the plugin in Oxlint and checks TypeScript re-exports and aliases acro
     writeFixture('src/oxlint/a/model.ts', 'export type Model = string;\n'),
     writeFixture('src/oxlint/a/types/detail.ts', 'export type Detail = string;\n'),
     writeFixture('src/oxlint/a/types/index.ts', "export type { Detail } from './detail';\n"),
-    writeFixture(
-      '.oxlintrc.json',
-      JSON.stringify({
-        categories: { correctness: 'off' },
-        jsPlugins: [{ name: 'module-boundaries', specifier: plugin }],
-        rules,
-      }),
-    ),
+    writeFixture('.oxlintrc.json', JSON.stringify({ categories: { correctness: 'off' }, jsPlugins: [plugin], rules })),
   ]);
 
   const run = promisify(execFile);
@@ -197,7 +188,7 @@ it('loads the plugin in Oxlint and checks TypeScript re-exports and aliases acro
   });
 
   const diagnostics = Array.from(
-    stdout.matchAll(/"code":\s*"module-boundaries\((?<rule>[^)]+)\)"/gu),
+    stdout.matchAll(/"code":\s*"boundary\((?<rule>[^)]+)\)"/gu),
     (match) => match.groups?.['rule'],
   );
   expect(diagnostics).toHaveLength(3);

@@ -1,5 +1,5 @@
 {
-  "name": "@b12k/module-boundaries-plugin",
+  "name": "@b12k/boundary",
   "version": "0.0.0",
   "description": "Module boundary rules for ESLint and Oxlint",
   "keywords": [
@@ -12,7 +12,7 @@
   "author": "Bogdan Kolesnyk",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/b12k/module-boundaries-plugin.git"
+    "url": "git+https://github.com/b12k/boundary.git"
   },
   "files": [
     "dist"

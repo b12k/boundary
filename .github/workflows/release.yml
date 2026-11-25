@@ -88,7 +88,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: pnpm ga:notify success "[@b12k/module-boundaries-plugin] Release succeeded."
+        run: pnpm ga:notify success "[@b12k/boundary] Release succeeded."
 
       - name: Notify release failed
         if: failure() && steps.release.outcome != 'success'
@@ -96,4 +96,4 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: pnpm ga:notify error "[@b12k/module-boundaries-plugin] Release failed."
+        run: pnpm ga:notify error "[@b12k/boundary] Release failed."
