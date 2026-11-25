@@ -3,10 +3,20 @@
   "version": "0.0.0",
   "description": "Module boundary rules for ESLint and Oxlint",
   "keywords": [
+    "architecture",
+    "barrel-files",
+    "dependencies",
     "eslint",
     "eslint-plugin",
+    "eslint-rules",
+    "export",
+    "import",
+    "javascript",
     "module-boundaries",
-    "oxlint"
+    "oxlint",
+    "oxlint-plugin",
+    "static-analysis",
+    "typescript"
   ],
   "license": "MIT",
   "author": "Bogdan Kolesnyk",
