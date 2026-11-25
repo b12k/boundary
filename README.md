@@ -55,7 +55,7 @@ Add the plugin and rules to `.oxlintrc.json` or `oxlint.config.ts`.
 | `barrel-reexports-only`      | Allows direct re-exports in an index, including named type re-exports.                                                                                                                      |
 | `no-deep-imports`            | Requires imports entering another module to use the first public index they cross. From `orders`, use `../users` to reach exports from `users/permissions`.                                 |
 | `no-explicit-index`          | Fixes `../users/index` to `../users` when directory imports are supported and both specifiers resolve to the same index.                                                                    |
-| `no-export-star`             | Forbids unnamed wildcard re-exports from an index. Named exports and namespace re-exports such as `export * as utils from './utils'` are allowed.                                           |
+| `no-export-star`             | Allows `export * from` in an index when the target is another module's public index. Named and namespace re-exports are allowed.                                                            |
 | `no-internal-barrel-imports` | Forbids importing your own index or an ancestor index. A file in `users/profile` may import `../service` directly and enter a sibling module through its public index.                      |
 | `no-parent-reexports`        | Keeps an index's local re-exports inside its directory. Reports re-exports from sibling or parent directories.                                                                              |
 | `no-shadowed-module-entry`   | Reports `utils/index.ts` when a sibling such as `utils.ts` can shadow the directory import.                                                                                                 |
@@ -122,10 +122,11 @@ import { getUser } from '../users';
 export * from './service';
 ```
 
-✅ List the public exports by name.
+✅ List the implementation exports by name or forward the public API of `permissions/index.ts`.
 
 ```ts
 export { getUser, updateUser } from './service';
+export * from './permissions';
 ```
 
 ### `no-internal-barrel-imports`

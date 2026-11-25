@@ -163,8 +163,13 @@ it('loads the plugin in Oxlint and checks TypeScript re-exports and aliases acro
   );
   await Promise.all([
     writeFixture('src/oxlint/consumer.ts', "import '@/oxlint/a/model';\nimport '@/oxlint/a/index';\n"),
-    writeFixture('src/oxlint/a/index.ts', "export type * from './model';\nexport * as models from './model';\n"),
+    writeFixture(
+      'src/oxlint/a/index.ts',
+      "export type * from './model';\nexport * as models from './model';\nexport type * from '@/oxlint/a/types';\n",
+    ),
     writeFixture('src/oxlint/a/model.ts', 'export type Model = string;\n'),
+    writeFixture('src/oxlint/a/types/detail.ts', 'export type Detail = string;\n'),
+    writeFixture('src/oxlint/a/types/index.ts', "export type { Detail } from './detail';\n"),
     writeFixture(
       '.oxlintrc.json',
       JSON.stringify({
@@ -218,6 +223,21 @@ describe('barrels', () => {
     expect(lint('no-export-star', 'src/users/index.ts', source)).toHaveLength(1);
     expect(lint('no-export-star', 'src/users/service.ts', source)).toEqual([]);
   });
+
+  it.each(['./permissions', './permissions/index.ts', '@/users/permissions'])(
+    'allows a wildcard re-export from another module index via %s',
+    (specifier) => {
+      expect(lint('no-export-star', 'src/users/index.ts', `export * from '${specifier}';`)).toEqual([]);
+    },
+  );
+
+  it.each(['./index', '@users', '@service', './missing'])(
+    'reports a wildcard re-export that does not lead to another module index via %s',
+    (specifier) => {
+      const messages = lint('no-export-star', 'src/users/index.ts', `export * from '${specifier}';`);
+      expect(messages.map((message) => message.messageId)).toEqual(['exportStar']);
+    },
+  );
 
   it('keeps relative and aliased re-exports inside the barrel directory', () => {
     const filename = 'src/users/profile/index.ts';
