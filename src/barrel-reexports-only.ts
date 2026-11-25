@@ -1,5 +1,5 @@
 import { checkIsIndexFile } from './module-paths';
-import { checkIsReexport, createRule } from './rule';
+import { createRule, getReexport } from './rule';
 
 export const barrelReexportsOnly = createRule(
   {
@@ -12,7 +12,7 @@ export const barrelReexportsOnly = createRule(
     return {
       Program(program) {
         for (const node of program.body) {
-          if (!checkIsReexport(node)) context.report({ messageId: 'reexportsOnly', node });
+          if (!getReexport(context, node)) context.report({ messageId: 'reexportsOnly', node });
         }
       },
     };

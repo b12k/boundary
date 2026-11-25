@@ -1,14 +1,16 @@
 /* oxlint-disable node/no-sync -- Linter visitors resolve files synchronously. */
 import type { Rule } from 'eslint';
 import type { TsConfigResult } from 'get-tsconfig';
+import type { NapiResolveOptions } from 'oxc-resolver';
 
 import { createFilesMatcher, getTsconfig } from 'get-tsconfig';
 import { realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { ResolverFactory } from 'oxc-resolver';
 
-const INDEX_FILES = ['index.ts', 'index.js'];
 const SCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'];
+const MODULE_EXTENSIONS = SCRIPT_EXTENSIONS.filter((extension) => extension !== '.mts' && extension !== '.cts');
+const INDEX_FILES = MODULE_EXTENSIONS.map((extension) => `index${extension}`);
 
 function checkIsDependency(filename: string) {
   return filename.split(path.sep).includes('node_modules');
@@ -74,24 +76,38 @@ function createModulePaths(filename: string, projectRoot: string) {
   const nearest = findTsconfig(sourceDirectory);
   const tsconfig =
     nearest && (findReferencedTsconfig(nearest, filename, new Set([path.normalize(nearest.path)])) ?? nearest);
-  const resolver = new ResolverFactory({
+  const resolverOptions: NapiResolveOptions = {
     builtinModules: true,
     conditionNames: ['import', 'node', 'default'],
-    extensionAlias: { '.cjs': ['.cjs', '.cts'], '.js': ['.js', '.ts', '.tsx'], '.mjs': ['.mjs', '.mts'] },
+    extensionAlias: {
+      '.cjs': ['.cjs', '.cts'],
+      '.js': ['.js', '.ts', '.tsx'],
+      '.jsx': ['.jsx', '.tsx'],
+      '.mjs': ['.mjs', '.mts'],
+    },
     extensions: [...SCRIPT_EXTENSIONS, '.json', '.node'],
     moduleType: true,
     tsconfig: tsconfig ? { configFile: tsconfig.path, references: 'auto' } : 'auto',
-  });
+  };
+  const resolver = new ResolverFactory(resolverOptions);
+  let requireResolver: ResolverFactory | undefined;
   const targetsBySpecifier = new Map<string, string | undefined>();
   const moduleStatusByDirectory = new Map<string, boolean>();
 
-  function resolveTarget(specifier: string) {
-    if (targetsBySpecifier.has(specifier)) return targetsBySpecifier.get(specifier);
+  function resolveTarget(specifier: string, isRequire = false) {
+    const request = isRequire ? `require:${specifier}` : `import:${specifier}`;
+    if (targetsBySpecifier.has(request)) return targetsBySpecifier.get(request);
 
-    const result = resolver.resolveFileSync(filename, specifier);
+    const moduleResolver = isRequire
+      ? (requireResolver ??= resolver.cloneWithOptions({
+          ...resolverOptions,
+          conditionNames: ['require', 'node', 'default'],
+        }))
+      : resolver;
+    const result = moduleResolver.resolveFileSync(filename, specifier);
     const target =
       result.path && path.isAbsolute(result.path) && !checkIsDependency(result.path) ? result.path : undefined;
-    targetsBySpecifier.set(specifier, target);
+    targetsBySpecifier.set(request, target);
     return target;
   }
 
@@ -117,6 +133,7 @@ function createModulePaths(filename: string, projectRoot: string) {
     compilerOptions: tsconfig?.config.compilerOptions,
     filename,
     findEntryBoundary,
+    projectRoot,
     resolveTarget,
     sourceDirectory,
   };
@@ -148,4 +165,15 @@ function getModulePaths(context: Rule.RuleContext) {
   return modulePaths;
 }
 
-export { checkIsFile, checkIsIndexFile, checkIsWithin, getModulePaths, SCRIPT_EXTENSIONS };
+export {
+  checkHasIndex,
+  checkIsDependency,
+  checkIsFile,
+  checkIsIndexFile,
+  checkIsWithin,
+  createModulePaths,
+  getModulePaths,
+  MODULE_EXTENSIONS,
+  resolvePhysicalPath,
+  SCRIPT_EXTENSIONS,
+};

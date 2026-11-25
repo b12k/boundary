@@ -1,6 +1,6 @@
 # Boundary
 
-ESLint and Oxlint rules for modules whose public entry point is `index.ts` or `index.js`.
+ESLint and Oxlint rules for modules with an `index` entry point. Supported extensions are `.ts`, `.js`, `.mjs`, `.cjs`, `.tsx`, and `.jsx`.
 
 Install the plugin with `pnpm add -D @b12k/boundary`.
 
@@ -11,10 +11,12 @@ import boundary from '@b12k/boundary';
 
 export default [
   {
+    files: ['**/*.{ts,js,mjs,cjs,tsx,jsx}'],
     plugins: { boundary },
     rules: {
       'boundary/barrel-reexports-only': 'error',
       'boundary/no-deep-imports': 'error',
+      'boundary/no-empty-module': 'error',
       'boundary/no-explicit-index': 'error',
       'boundary/no-export-star': 'error',
       'boundary/no-internal-barrel-imports': 'error',
@@ -26,7 +28,7 @@ export default [
 ];
 ```
 
-Use the project's TypeScript parser configuration to lint TypeScript files with ESLint.
+Use the project's parser configuration for TypeScript and JSX files.
 
 ## Oxlint
 
@@ -38,6 +40,7 @@ Add the plugin and rules to `.oxlintrc.json` or `oxlint.config.ts`.
   "rules": {
     "boundary/barrel-reexports-only": "error",
     "boundary/no-deep-imports": "error",
+    "boundary/no-empty-module": "error",
     "boundary/no-explicit-index": "error",
     "boundary/no-export-star": "error",
     "boundary/no-internal-barrel-imports": "error",
@@ -54,6 +57,7 @@ Add the plugin and rules to `.oxlintrc.json` or `oxlint.config.ts`.
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `barrel-reexports-only`      | Allows direct re-exports in an index, including named type re-exports.                                                                                                                      |
 | `no-deep-imports`            | Requires imports entering another module to use the first public index they cross. From `orders`, use `../users` to reach exports from `users/permissions`.                                 |
+| `no-empty-module`            | Reports a module directory that contains only its index files and optional `.boundary.*` config.                                                                                            |
 | `no-explicit-index`          | Fixes `../users/index` to `../users` when directory imports are supported and both specifiers resolve to the same index.                                                                    |
 | `no-export-star`             | Allows `export * from` in an index when the target is another module's public index. Named and namespace re-exports are allowed.                                                            |
 | `no-internal-barrel-imports` | Forbids importing your own index or an ancestor index. A file in `users/profile` may import `../service` directly and enter a sibling module through its public index.                      |
@@ -62,6 +66,38 @@ Add the plugin and rules to `.oxlintrc.json` or `oxlint.config.ts`.
 | `no-useless-barrel`          | Reports an index that only re-exports the sole same-name implementation file in its directory. Supporting files such as `utils.test.ts` and `utils.css` keep the directory structure valid. |
 
 💡 It also understands aliases like `@/users` from `tsconfig.json`.
+
+For CommonJS files, Boundary checks literal `require()` calls and direct re-exports such as `module.exports = require('./child/index.cjs')` and `exports.read = require('./reader.cjs').read`.
+
+## Module policies
+
+Enable either rule in the `rules` section of your ESLint or Oxlint config.
+
+| Rule                            | Behavior                                                                                     |
+| ------------------------------- | -------------------------------------------------------------------------------------------- |
+| `boundary/use-dot-boundary`     | Validates `.boundary.*` files and reports forbidden dependencies at the import or re-export. |
+| `boundary/require-dot-boundary` | Reports a module's index when its directory has no `.boundary.*` file of its own.            |
+
+Place one `.boundary.{ts,js,mjs,cjs,tsx,jsx}` file beside a module's index. A config at the project root can describe top-level modules without a root index.
+
+```ts
+// users/.boundary.ts
+import { defineBoundary } from '@b12k/boundary';
+
+export default defineBoundary({
+  imports: { allow: ['../shared'] },
+  layers: ['repository', ['service', 'events'], 'controller'],
+  hierarchy: { controller: ['service'] },
+});
+```
+
+For CommonJS, use `const { defineBoundary } = require('@b12k/boundary')` and `module.exports = defineBoundary({ … })`. The linter reads the object literal statically.
+
+- **`imports`** applies to dependencies that leave the module's subtree. `allow` permits only the listed modules, while `deny` blocks only the listed modules. Paths are relative to the config file and can use TypeScript aliases.
+- **`layers`** applies to named direct child modules. Higher layers can use lower layers. Children on the same layer cannot import each other.
+- **`hierarchy`** lists which direct siblings a named child can use. A child with an empty target list cannot import any of its siblings. An omitted source has no additional hierarchy restriction.
+
+Policies apply together. In the example, a file deep inside `controller` can import `service`, but importing `repository` violates `hierarchy` even though `layers` permits that direction. The public-index rules still govern which files those imports can target.
 
 ## Examples
 
@@ -96,6 +132,24 @@ import { checkPermission } from '../users/permissions';
 
 ```ts
 import { checkPermission } from '../users';
+```
+
+### `no-empty-module`
+
+❌ The directory contains only an index and a boundary config.
+
+```text
+users/
+├── .boundary.ts
+└── index.ts
+```
+
+✅ The directory contains module code alongside the index.
+
+```text
+users/
+├── index.ts
+└── service.ts
 ```
 
 ### `no-explicit-index`

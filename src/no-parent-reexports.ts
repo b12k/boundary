@@ -1,7 +1,5 @@
-import type { ExportAllDeclaration, ExportNamedDeclaration } from 'estree';
-
 import { checkIsIndexFile, checkIsWithin, getModulePaths } from './module-paths';
-import { createRule } from './rule';
+import { createRule, visitReexports } from './rule';
 
 export const noParentReexports = createRule(
   {
@@ -15,16 +13,11 @@ export const noParentReexports = createRule(
     if (!paths) return {};
 
     const { resolveTarget, sourceDirectory } = paths;
-    function handleReexport(node: ExportAllDeclaration | ExportNamedDeclaration) {
-      const { source } = node;
-      if (typeof source?.value !== 'string') return;
-
-      const target = resolveTarget(source.value);
+    return visitReexports(context, (_, { isRequire, source }) => {
+      const target = resolveTarget(source.value, isRequire);
       if (target && !checkIsWithin(sourceDirectory, target)) {
         context.report({ messageId: 'parentReexport', node: source });
       }
-    }
-
-    return { ExportAllDeclaration: handleReexport, ExportNamedDeclaration: handleReexport };
+    });
   },
 );

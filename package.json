@@ -54,6 +54,7 @@
   },
   "dependencies": {
     "get-tsconfig": "4.14.3",
+    "oxc-parser": "0.160.0",
     "oxc-resolver": "11.24.2"
   },
   "devDependencies": {

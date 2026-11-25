@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { checkIsFile, checkIsIndexFile, getModulePaths, SCRIPT_EXTENSIONS } from './module-paths';
-import { checkIsReexport, createRule } from './rule';
+import { createRule, getReexport } from './rule';
 
 function findSameNamedFile(directory: string) {
   let entries: Array<string>;
@@ -44,9 +44,10 @@ export const noUselessBarrel = createRule(
         if (!sibling || path.relative(paths.filename, sibling) === '') return;
 
         const isForwarding = program.body.every((node) => {
-          if (!checkIsReexport(node) || typeof node.source.value !== 'string') return false;
+          const reexport = getReexport(context, node);
+          if (!reexport) return false;
 
-          const target = paths.resolveTarget(node.source.value);
+          const target = paths.resolveTarget(reexport.source.value, reexport.isRequire);
           return target !== undefined && path.relative(target, sibling) === '';
         });
         if (isForwarding) {

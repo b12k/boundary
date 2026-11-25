@@ -1,16 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from '@rstest/core';
-import { Linter } from 'eslint';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import boundary from '../src/index';
-
-type RuleName = keyof typeof boundary.rules;
+import { createFixture } from './fixture';
 
 const FILES = [
   'src/mixed/index.js',
@@ -35,16 +31,10 @@ const FILES = [
   'src/native/main.mjs',
 ];
 
-let root = '';
-
-async function writeFixture(filename: string, contents: string) {
-  const target = path.join(root, filename);
-  await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(target, contents);
-}
+const { cleanup, getRoot, lint, start, writeFixture } = createFixture();
 
 beforeAll(async () => {
-  root = await mkdtemp(path.join(tmpdir(), 'boundary-'));
+  await start();
 
   await Promise.all([
     ...FILES.map((filename) => writeFixture(filename, '')),
@@ -63,20 +53,7 @@ beforeAll(async () => {
   ]);
 });
 
-afterAll(async () => {
-  if (root) await rm(root, { force: true, recursive: true });
-});
-
-function lint(rule: RuleName, filename: string, source: string) {
-  const linter = new Linter({ cwd: root });
-  const config: Linter.Config = {
-    files: ['**/*.{js,ts,mjs}'],
-    plugins: { boundary },
-    rules: { [`boundary/${rule}`]: 'error' },
-  };
-  const options = { filename: path.join(root, filename) };
-  return linter.verify(source, config, options);
-}
+afterAll(cleanup);
 
 describe('module imports', () => {
   it.each([
@@ -152,13 +129,17 @@ describe('module imports', () => {
   });
 });
 
-it('loads the plugin in Oxlint and checks TypeScript re-exports and aliases across files', async () => {
+it('checks all supported extensions, type re-exports and aliases in Oxlint', async () => {
   const projectRoot = process.cwd();
   const { resolve } = createRequire(path.join(projectRoot, 'package.json'));
   const cli = path.join(path.dirname(resolve('oxlint/package.json')), 'bin/oxlint');
   const plugin = path.join(projectRoot, 'src/index.ts');
   const loader = pathToFileURL(resolve('tsx')).href;
-  const rules = Object.fromEntries(Object.keys(boundary.rules).map((rule) => [`boundary/${rule}`, 'error']));
+  const rules = Object.fromEntries(
+    Object.keys(boundary.rules)
+      .filter((rule) => rule !== 'require-dot-boundary' && rule !== 'use-dot-boundary')
+      .map((rule) => [`boundary/${rule}`, 'error']),
+  );
   await Promise.all([
     writeFixture('src/oxlint/consumer.ts', "import '@/oxlint/a/model';\nimport '@/oxlint/a/index';\n"),
     writeFixture(
@@ -168,12 +149,24 @@ it('loads the plugin in Oxlint and checks TypeScript re-exports and aliases acro
     writeFixture('src/oxlint/a/model.ts', 'export type Model = string;\n'),
     writeFixture('src/oxlint/a/types/detail.ts', 'export type Detail = string;\n'),
     writeFixture('src/oxlint/a/types/index.ts', "export type { Detail } from './detail';\n"),
+    writeFixture('src/oxlint/common/index.cjs', "module.exports = require('./child/index.cjs');"),
+    writeFixture('src/oxlint/common/child/index.cjs', "exports.read = require('./read.cjs').read;"),
+    writeFixture('src/oxlint/common/child/read.cjs', 'exports.read = () => true;'),
+    writeFixture('src/oxlint/consumer.cjs', "require('./common/child/read.cjs');"),
+    writeFixture('src/oxlint/empty/index.mjs', ''),
+    writeFixture('src/oxlint/consumer.js', "import './common/child/read.cjs';"),
+    writeFixture('src/oxlint/consumer.mjs', "import './common/child/read.cjs';"),
+    writeFixture('src/oxlint/consumer.jsx', "import './common/child/read.cjs';\n<div />;"),
+    writeFixture(
+      'src/oxlint/consumer.tsx',
+      "import './common/child/read.cjs';\nconst label: string = 'ready';\n<div>{label}</div>;",
+    ),
     writeFixture('.oxlintrc.json', JSON.stringify({ categories: { correctness: 'off' }, jsPlugins: [plugin], rules })),
   ]);
 
   const run = promisify(execFile);
   const { stdout } = await run(process.execPath, ['--import', loader, cli, '--format', 'json', 'src/oxlint'], {
-    cwd: root,
+    cwd: getRoot(),
   }).catch((error: unknown) => {
     if (
       !(error instanceof Error) ||
@@ -191,11 +184,30 @@ it('loads the plugin in Oxlint and checks TypeScript re-exports and aliases acro
     stdout.matchAll(/"code":\s*"boundary\((?<rule>[^)]+)\)"/gu),
     (match) => match.groups?.['rule'],
   );
-  expect(diagnostics).toHaveLength(3);
-  expect(diagnostics).toEqual(expect.arrayContaining(['no-deep-imports', 'no-explicit-index', 'no-export-star']));
+  expect(diagnostics).toHaveLength(10);
+  expect(diagnostics.filter((rule) => rule === 'no-deep-imports')).toHaveLength(6);
+  expect(diagnostics.filter((rule) => rule === 'no-explicit-index')).toHaveLength(2);
+  expect(diagnostics).toContain('no-export-star');
+  expect(diagnostics).toContain('no-empty-module');
 });
 
 describe('barrels', () => {
+  it.each([
+    ['index.ts', [], true],
+    ['index.cjs', ['.boundary.ts', 'index.tsx'], true],
+    ['index.ts', ['styles.css'], false],
+    ['index.tsx', ['index.test.tsx'], false],
+    ['index.mjs', ['child/index.mjs'], false],
+  ])('checks whether a module with %s and %j contains anything else', async (index, entries, isEmpty) => {
+    const directory = `src/empty-${index}-${entries.length}-${isEmpty}`;
+    const filename = `${directory}/${index}`;
+    await Promise.all([index, ...entries].map((entry) => writeFixture(`${directory}/${entry}`, '')));
+
+    const messages = lint('no-empty-module', filename, '');
+    expect(messages.map((message) => message.messageId)).toEqual(isEmpty ? ['emptyModule'] : []);
+    if (isEmpty) expect(messages[0]?.line).toBe(1);
+  });
+
   it('requires direct re-exports and ignores comments', () => {
     expect(
       lint('barrel-reexports-only', 'src/users/index.ts', "// public API\nexport { getUser } from './service';"),

@@ -12,8 +12,8 @@ export const noDeepImports = createRule(
     const paths = getModulePaths(context);
     if (!paths) return {};
 
-    return visitSpecifiers((source, specifier) => {
-      const target = paths.resolveTarget(specifier);
+    return visitSpecifiers(context, (source, kind) => {
+      const target = paths.resolveTarget(source.value, kind === 'require');
       if (!target) return;
 
       const boundary = paths.findEntryBoundary(target);

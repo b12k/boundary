@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { checkIsIndexFile, getModulePaths } from './module-paths';
-import { createRule } from './rule';
+import { createRule, visitReexports } from './rule';
 
 export const noExportStar = createRule(
   {
@@ -11,21 +11,18 @@ export const noExportStar = createRule(
   (context) => {
     if (!checkIsIndexFile(context.filename)) return {};
 
-    return {
-      ExportAllDeclaration(node) {
-        if (node.exported) return;
+    return visitReexports(context, (node, { isRequire, isWildcard, source }) => {
+      if (!isWildcard) return;
 
-        const paths = getModulePaths(context);
-        const specifier = node.source.value;
-        if (paths && typeof specifier === 'string') {
-          const target = paths.resolveTarget(specifier);
-          if (target && checkIsIndexFile(target) && path.relative(paths.sourceDirectory, path.dirname(target)) !== '') {
-            return;
-          }
+      const paths = getModulePaths(context);
+      if (paths) {
+        const target = paths.resolveTarget(source.value, isRequire);
+        if (target && checkIsIndexFile(target) && path.relative(paths.sourceDirectory, path.dirname(target)) !== '') {
+          return;
         }
+      }
 
-        context.report({ messageId: 'exportStar', node });
-      },
-    };
+      context.report({ messageId: 'exportStar', node });
+    });
   },
 );
