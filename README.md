@@ -4,8 +4,6 @@
 
 A collection of ESLint and Oxlint rules for enforcing architectural decisions in JavaScript and TypeScript projects. Use public `index` entry points to define module APIs and [`.boundary.*` policies](#module-policies) to control dependencies between modules and layers.
 
-Supported entry point extensions are `.ts`, `.js`, `.mjs`, `.cjs`, `.tsx`, and `.jsx`.
-
 Install the plugin with `pnpm add -D @b12k/boundary`.
 
 ## ESLint
