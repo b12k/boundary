@@ -24,13 +24,18 @@ export function createFixture() {
     await writeFile(target, contents);
   }
 
-  function lint(rule: RuleName, filename: string, source: string): Array<Linter.LintMessage> {
+  function lint(
+    rule: RuleName,
+    filename: string,
+    source: string,
+    setting: Linter.RuleEntry = 'error',
+  ): Array<Linter.LintMessage> {
     const linter = new Linter({ cwd: root });
     const config: Linter.Config = {
       files: ['**/*.{ts,js,mjs,cjs,tsx,jsx}'],
       languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } },
       plugins: { boundary },
-      rules: { [`boundary/${rule}`]: 'error' },
+      rules: { [`boundary/${rule}`]: setting },
     };
     const options = { filename: path.join(root, filename) };
     return linter.verify(source, config, options);

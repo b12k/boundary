@@ -81,11 +81,7 @@ function getReexport(context: Rule.RuleContext, node: Node): Reexport | undefine
     (node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') &&
     checkIsStringLiteral(node.source)
   ) {
-    return {
-      isRequire: false,
-      isWildcard: node.type === 'ExportAllDeclaration' && !node.exported,
-      source: node.source,
-    };
+    return { isRequire: false, isWildcard: node.type === 'ExportAllDeclaration', source: node.source };
   }
   return getCommonJsReexport(context, node);
 }

@@ -1,6 +1,10 @@
 # Boundary
 
-ESLint and Oxlint rules for modules with an `index` entry point. Supported extensions are `.ts`, `.js`, `.mjs`, `.cjs`, `.tsx`, and `.jsx`.
+<img src="./assets/boundary-honeycomb.svg" alt=".boundary logo" width="320" />
+
+A collection of ESLint and Oxlint rules for enforcing architectural decisions in JavaScript and TypeScript projects. Use public `index` entry points to define module APIs and [`.boundary.*` policies](#module-policies) to control dependencies between modules and layers.
+
+Supported entry point extensions are `.ts`, `.js`, `.mjs`, `.cjs`, `.tsx`, and `.jsx`.
 
 Install the plugin with `pnpm add -D @b12k/boundary`.
 
@@ -174,6 +178,7 @@ import { getUser } from '../users';
 
 ```ts
 export * from './service';
+export * as service from './service';
 ```
 
 ✅ List the implementation exports by name or forward the public API of `permissions/index.ts`.
@@ -181,6 +186,12 @@ export * from './service';
 ```ts
 export { getUser, updateUser } from './service';
 export * from './permissions';
+```
+
+`allowFromBarrels` defaults to `true` for both `export *` and `export * as name`. Set it to `false` to also report these re-exports from other module indices.
+
+```json
+{ "rules": { "boundary/no-export-star": ["error", { "allowFromBarrels": false }] } }
 ```
 
 ### `no-internal-barrel-imports`

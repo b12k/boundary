@@ -140,6 +140,9 @@ it('checks all supported extensions, type re-exports and aliases in Oxlint', asy
       .filter((rule) => rule !== 'require-dot-boundary' && rule !== 'use-dot-boundary')
       .map((rule) => [`boundary/${rule}`, 'error']),
   );
+  const overrides = [
+    { files: ['src/oxlint/a/index.ts'], rules: { 'boundary/no-export-star': ['error', { allowFromBarrels: false }] } },
+  ];
   await Promise.all([
     writeFixture('src/oxlint/consumer.ts', "import '@/oxlint/a/model';\nimport '@/oxlint/a/index';\n"),
     writeFixture(
@@ -161,7 +164,10 @@ it('checks all supported extensions, type re-exports and aliases in Oxlint', asy
       'src/oxlint/consumer.tsx',
       "import './common/child/read.cjs';\nconst label: string = 'ready';\n<div>{label}</div>;",
     ),
-    writeFixture('.oxlintrc.json', JSON.stringify({ categories: { correctness: 'off' }, jsPlugins: [plugin], rules })),
+    writeFixture(
+      '.oxlintrc.json',
+      JSON.stringify({ categories: { correctness: 'off' }, jsPlugins: [plugin], overrides, rules }),
+    ),
   ]);
 
   const run = promisify(execFile);
@@ -184,10 +190,10 @@ it('checks all supported extensions, type re-exports and aliases in Oxlint', asy
     stdout.matchAll(/"code":\s*"boundary\((?<rule>[^)]+)\)"/gu),
     (match) => match.groups?.['rule'],
   );
-  expect(diagnostics).toHaveLength(10);
+  expect(diagnostics).toHaveLength(12);
   expect(diagnostics.filter((rule) => rule === 'no-deep-imports')).toHaveLength(6);
   expect(diagnostics.filter((rule) => rule === 'no-explicit-index')).toHaveLength(2);
-  expect(diagnostics).toContain('no-export-star');
+  expect(diagnostics.filter((rule) => rule === 'no-export-star')).toHaveLength(3);
   expect(diagnostics).toContain('no-empty-module');
 });
 
@@ -222,8 +228,8 @@ describe('barrels', () => {
   });
 
   it('reports a wildcard only in an index', () => {
-    const source = "export * from './service'; export * as permissions from './permissions';";
-    expect(lint('no-export-star', 'src/users/index.ts', source)).toHaveLength(1);
+    const source = "export * from './service'; export * as service from './service';";
+    expect(lint('no-export-star', 'src/users/index.ts', source)).toHaveLength(2);
     expect(lint('no-export-star', 'src/users/service.ts', source)).toEqual([]);
   });
 
@@ -233,6 +239,16 @@ describe('barrels', () => {
       expect(lint('no-export-star', 'src/users/index.ts', `export * from '${specifier}';`)).toEqual([]);
     },
   );
+
+  it.each([true, false])('handles allowFromBarrels: %s', (allowFromBarrels) => {
+    const source = [
+      "export * from './permissions';",
+      "export * as permissions from '@/users/permissions';",
+      "export { getUser } from './service';",
+    ].join('\n');
+    const messages = lint('no-export-star', 'src/users/index.ts', source, ['error', { allowFromBarrels }]);
+    expect(messages.map((message) => message.line)).toEqual(allowFromBarrels ? [] : [1, 2]);
+  });
 
   it.each(['./index', '@users', '@service', './missing'])(
     'reports a wildcard re-export that does not lead to another module index via %s',

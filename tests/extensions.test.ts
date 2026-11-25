@@ -78,6 +78,9 @@ describe('supported extensions', () => {
     const source = "exports.read = require('./implementation.cjs').read;";
     expect(lint('barrel-reexports-only', barrel, source)).toEqual([]);
     expect(lint('no-export-star', barrel, source)).toEqual([]);
+    const wildcard = "module.exports = require('./child/index.cjs');";
+    const messages = lint('no-export-star', barrel, wildcard, ['error', { allowFromBarrels: false }]);
+    expect(messages.map((message) => message.messageId)).toEqual(['strictExportStar']);
 
     const shadowed = "function load(require) { return require('./feature/implementation.cjs'); }";
     expect(lint('no-deep-imports', 'src/extensions/cjs/caller.cjs', shadowed)).toEqual([]);
