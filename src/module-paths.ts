@@ -156,7 +156,13 @@ function getModulePaths(context: Rule.RuleContext) {
   const { cwd, filename: lintFilename, physicalFilename, sourceCode } = context;
   if (lintFilename !== physicalFilename || !path.isAbsolute(physicalFilename)) return cachedPaths;
 
-  const filename = resolvePhysicalPath(physicalFilename);
+  let filename: string;
+  try {
+    filename = realpathSync.native(physicalFilename);
+  } catch {
+    // An unsaved file can still have a directory reached through a symlink.
+    filename = path.join(resolvePhysicalPath(path.dirname(physicalFilename)), path.basename(physicalFilename));
+  }
   const projectRoot = resolvePhysicalPath(cwd);
   if (checkIsDependency(filename) || !checkIsWithin(projectRoot, filename)) return cachedPaths;
 
