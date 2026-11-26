@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 298" role="img" aria-labelledby="title description">
+  <title id="title">Imports across module boundaries</title>
+  <desc id="description">Orders can import from the public index of Users. It cannot import the nested Service module directly. Within Users, Controller can import Service, and Service can import Repository. Repository cannot import Controller.</desc>
+  <style>
+    svg { color: #234b64; }
+    .allowed { color: #168044; }
+    .blocked { color: #b42318; }
+    @media (prefers-color-scheme: dark) {
+      svg { color: #b0cedf; }
+      .allowed { color: #4ade80; }
+      .blocked { color: #ff847c; }
+    }
+  </style>
+  <defs>
+    <marker id="allowed-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="allowed" d="M1 1 L7 4 L1 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </marker>
+    <marker id="blocked-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="blocked" d="M1 1 L7 4 L1 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </marker>
+  </defs>
+  <g fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".65">
+    <rect x="16" y="73" width="136" height="93" rx="10" />
+    <rect x="240" y="12" width="404" height="248" rx="10" />
+    <rect x="416" y="47" width="176" height="47" rx="7" />
+    <rect x="416" y="125" width="176" height="47" rx="7" />
+    <rect x="416" y="203" width="176" height="47" rx="7" />
+    <rect x="240" y="91" width="164" height="40" rx="7" />
+  </g>
+  <g fill="currentColor" font-family="monospace" font-size="16" font-weight="600">
+    <text x="30" y="100">orders/</text>
+    <text x="254" y="39">users/</text>
+    <text x="254" y="114">index.ts</text>
+    <text x="430" y="68">controller/</text>
+    <text x="430" y="146">service/</text>
+    <text x="430" y="224">repository/</text>
+  </g>
+  <g fill="currentColor" font-family="system-ui, sans-serif" font-size="12">
+    <text x="30" y="128" font-family="monospace" font-size="14">view.ts</text>
+    <text x="342" y="114">Public API</text>
+    <text x="430" y="84">index.ts</text>
+    <text x="430" y="162">index.ts</text>
+    <text x="430" y="240">index.ts</text>
+  </g>
+  <g class="allowed" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#allowed-arrow)">
+    <path d="M152 110 H236" />
+    <path d="M504 95 V121" />
+    <path d="M504 173 V199" />
+    <path d="M203 280 H227" />
+  </g>
+  <g class="blocked" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#blocked-arrow)">
+    <path d="M152 141 H199 V148 H412" />
+    <path d="M593 226 H620 V70 H596" />
+    <path d="M362 280 H386" />
+  </g>
+  <g class="blocked" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M302 144 L310 152 M310 144 L302 152" />
+    <path d="M616 144 L624 152 M624 144 L616 152" />
+  </g>
+  <g fill="currentColor" font-family="system-ui, sans-serif" font-size="14">
+    <text x="237" y="285">Allowed import</text>
+    <text x="396" y="285">Blocked import</text>
+  </g>
+</svg>
