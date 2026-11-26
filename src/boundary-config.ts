@@ -3,7 +3,7 @@ import type { ArrayExpressionElement, Expression, ObjectExpression, ObjectProper
 import path from 'node:path';
 import { parseSync } from 'oxc-parser';
 
-import { findChildModule } from './boundary-files';
+import { findChildEntry } from './boundary-files';
 import {
   checkHasIndex,
   checkIsDependency,
@@ -30,7 +30,11 @@ interface ModulePolicy {
 
 type References = Map<string, Span>;
 
-type ResolveModule = (specifier: string) => string | undefined;
+interface ReferenceScope {
+  expected: string;
+  kind: 'child' | 'module';
+  resolve: (specifier: string) => string | undefined;
+}
 
 function checkViolatesLayers(layers: ModulePolicy['layers'], source: string, target: string) {
   const sourceLayer = layers.get(source);
@@ -122,69 +126,66 @@ function readFields(node: Expression, issues: Array<ConfigIssue>) {
 function readReferences(
   elements: Array<ArrayExpressionElement>,
   span: Span,
-  resolveModule: ResolveModule,
+  scope: ReferenceScope,
   issues: Array<ConfigIssue>,
 ) {
   const references: References = new Map();
   for (const element of elements) {
     if (element?.type !== 'Literal' || typeof element.value !== 'string') {
-      issues.push({ message: 'Expected a module path as a string literal.', span: element ?? span });
+      issues.push({ message: `Expected a ${scope.kind} path as a string literal.`, span: element ?? span });
     } else {
       const { value } = element;
-      const directory = resolveModule(value);
-      if (!directory) {
-        issues.push({
-          message: `Cannot use "${value}" here. Expected an existing module with an index in this policy's scope.`,
-          span: element,
-        });
-      } else if (references.has(directory)) {
-        issues.push({ message: `Duplicate module "${value}".`, span: element });
+      const entry = scope.resolve(value);
+      if (!entry) {
+        issues.push({ message: `Cannot use "${value}" here. Expected ${scope.expected}.`, span: element });
+      } else if (references.has(entry)) {
+        issues.push({ message: `Duplicate ${scope.kind} "${value}".`, span: element });
       } else {
-        references.set(directory, element);
+        references.set(entry, element);
       }
     }
   }
   return references;
 }
 
-function readReferenceArray(node: Expression, resolveModule: ResolveModule, issues: Array<ConfigIssue>) {
-  if (node.type === 'ArrayExpression') return readReferences(node.elements, node, resolveModule, issues);
-  issues.push({ message: 'Expected an array of module paths.', span: node });
+function readReferenceArray(node: Expression, scope: ReferenceScope, issues: Array<ConfigIssue>) {
+  if (node.type === 'ArrayExpression') return readReferences(node.elements, node, scope, issues);
+  issues.push({ message: `Expected an array of ${scope.kind} paths.`, span: node });
   return new Map<string, Span>();
 }
 
-function readHierarchy(node: Expression, resolveChild: ResolveModule, issues: Array<ConfigIssue>) {
+function readHierarchy(node: Expression, scope: ReferenceScope, issues: Array<ConfigIssue>) {
   const hierarchy = new Map<string, References>();
   for (const [name, field] of readFields(node, issues)) {
-    const directory = resolveChild(name);
-    if (!directory) {
-      issues.push({ message: `"${name}" is not a direct child module.`, span: field.key });
-    } else if (hierarchy.has(directory)) {
-      issues.push({ message: `Duplicate module "${name}".`, span: field.key });
+    const child = scope.resolve(name);
+    if (!child) {
+      issues.push({ message: `"${name}" is not a direct child file or directory.`, span: field.key });
+    } else if (hierarchy.has(child)) {
+      issues.push({ message: `Duplicate child "${name}".`, span: field.key });
     } else {
-      const targets = readReferenceArray(field.value, resolveChild, issues);
-      const self = targets.get(directory);
-      if (self) issues.push({ message: 'A module cannot reference itself in hierarchy.', span: self });
-      hierarchy.set(directory, targets);
+      const targets = readReferenceArray(field.value, scope, issues);
+      const self = targets.get(child);
+      if (self) issues.push({ message: 'A child cannot reference itself in hierarchy.', span: self });
+      hierarchy.set(child, targets);
     }
   }
   return hierarchy;
 }
 
-function readImports(node: Expression, resolveModule: ResolveModule, issues: Array<ConfigIssue>) {
+function readImports(node: Expression, scope: ReferenceScope, issues: Array<ConfigIssue>) {
   const fields = readFields(node, issues);
   let imports: ImportsPolicy | undefined;
   const [kind] = fields.keys();
   if (fields.size === 1 && (kind === 'allow' || kind === 'deny')) {
     const field = fields.get(kind);
-    if (field) imports = { kind, modules: readReferenceArray(field.value, resolveModule, issues) };
+    if (field) imports = { kind, modules: readReferenceArray(field.value, scope, issues) };
   } else if (node.type === 'ObjectExpression') {
     issues.push({ message: 'Set exactly one of imports.allow or imports.deny.', span: node });
   }
   return imports;
 }
 
-function readLayers(node: Expression, resolveChild: ResolveModule, issues: Array<ConfigIssue>) {
+function readLayers(node: Expression, scope: ReferenceScope, issues: Array<ConfigIssue>) {
   const layers = new Map<string, number>();
   if (node.type !== 'ArrayExpression') {
     issues.push({ message: 'Expected an ordered array of layers.', span: node });
@@ -193,11 +194,11 @@ function readLayers(node: Expression, resolveChild: ResolveModule, issues: Array
 
   for (const [position, layer] of node.elements.entries()) {
     const elements = layer?.type === 'ArrayExpression' ? layer.elements : [layer];
-    for (const [directory, span] of readReferences(elements, layer ?? node, resolveChild, issues)) {
-      if (layers.has(directory)) {
-        issues.push({ message: 'A module can only appear in one layer.', span });
+    for (const [child, span] of readReferences(elements, layer ?? node, scope, issues)) {
+      if (layers.has(child)) {
+        issues.push({ message: 'A child can only appear in one layer.', span });
       } else {
-        layers.set(directory, position);
+        layers.set(child, position);
       }
     }
   }
@@ -239,14 +240,21 @@ function readBoundaryConfig(filename: string, text: string, projectRoot: string)
       : undefined;
   }
 
-  function resolveChild(name: string) {
-    return findChildModule(directory, name);
-  }
+  const importScope: ReferenceScope = {
+    expected: "an existing module with an index in this policy's scope",
+    kind: 'module',
+    resolve: resolveImport,
+  };
+  const childScope: ReferenceScope = {
+    expected: 'an existing direct child file or directory',
+    kind: 'child',
+    resolve: (name) => findChildEntry(directory, name),
+  };
 
   for (const [name, field] of readFields(object, issues)) {
-    if (name === 'imports') policy.imports = readImports(field.value, resolveImport, issues);
-    else if (name === 'layers') policy.layers = readLayers(field.value, resolveChild, issues);
-    else if (name === 'hierarchy') policy.hierarchy = readHierarchy(field.value, resolveChild, issues);
+    if (name === 'imports') policy.imports = readImports(field.value, importScope, issues);
+    else if (name === 'layers') policy.layers = readLayers(field.value, childScope, issues);
+    else if (name === 'hierarchy') policy.hierarchy = readHierarchy(field.value, childScope, issues);
     else issues.push({ message: `Unknown boundary property "${name}".`, span: field.key });
   }
 

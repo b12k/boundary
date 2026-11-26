@@ -5,8 +5,15 @@ import path from 'node:path';
 import type { ConfigIssue, ModulePolicy } from './boundary-config';
 
 import { checkViolatesLayers, readBoundaryConfig } from './boundary-config';
-import { findChildModule, listDotBoundaryFiles, listModuleDirectories } from './boundary-files';
+import { listDotBoundaryFiles, listModuleDirectories } from './boundary-files';
 import { checkHasIndex, checkIsWithin } from './module-paths';
+
+interface Dependency {
+  source: string;
+  sourceModule: string | undefined;
+  target: string;
+  targetModule: string | undefined;
+}
 
 type LoadConfig = (directory: string) => LoadedConfig | undefined;
 
@@ -51,30 +58,30 @@ function findChildPolicyViolation(policy: ModulePolicy, source: string, target: 
   return reason;
 }
 
-function findModuleBranch(directory: string, moduleDirectory: string) {
-  const [name] = path.relative(directory, moduleDirectory).split(path.sep);
-  return name && checkIsWithin(directory, moduleDirectory) ? findChildModule(directory, name) : undefined;
+function getChildPath(directory: string, entry: string) {
+  const [name] = path.relative(directory, entry).split(path.sep);
+  return name ? path.join(directory, name) : undefined;
 }
 
-function findPolicyViolation(scopes: Array<string>, source: string, target: string, loadConfig: LoadConfig) {
-  let violation: undefined | { filename: string; reason: string };
+function findPolicyViolation(scopes: Array<string>, dependency: Dependency, loadConfig: LoadConfig) {
+  let violation: undefined | { filename: string; reason: string; source: string; target: string };
   for (const scope of scopes) {
-    const isOutgoing = !checkIsWithin(scope, target);
-    const sourceBranch = isOutgoing ? undefined : findModuleBranch(scope, source);
-    const targetBranch = isOutgoing ? undefined : findModuleBranch(scope, target);
-    if (isOutgoing || (sourceBranch && targetBranch && sourceBranch !== targetBranch)) {
+    const isOutgoing = !checkIsWithin(scope, dependency.target);
+    const source = isOutgoing ? dependency.sourceModule : getChildPath(scope, dependency.source);
+    const target = isOutgoing ? dependency.targetModule : getChildPath(scope, dependency.target);
+    if (source && target && path.relative(source, target) !== '') {
       const loaded = loadConfig(scope);
       let reason = loaded?.issue && `invalid config: ${loaded.issue}`;
       if (loaded?.policy) {
         const { imports } = loaded.policy;
         if (isOutgoing && imports && imports.modules.has(target) !== (imports.kind === 'allow')) {
           reason = `imports.${imports.kind} forbids this dependency`;
-        } else if (sourceBranch && targetBranch) {
-          reason = findChildPolicyViolation(loaded.policy, sourceBranch, targetBranch);
+        } else if (!isOutgoing) {
+          reason = findChildPolicyViolation(loaded.policy, source, target);
         }
       }
       if (loaded && reason) {
-        violation = { filename: loaded.filename, reason };
+        violation = { filename: loaded.filename, reason, source, target };
         break;
       }
     }
@@ -107,7 +114,8 @@ function readConfigIssues(filename: string, text: string, projectRoot: string, l
   if (issues.length === 0 && imports?.kind === 'allow') {
     const parents = getPolicyScopes(directory, projectRoot).filter((scope) => path.relative(scope, directory) !== '');
     for (const [target, span] of imports.modules) {
-      const violation = findPolicyViolation(parents, directory, target, loadConfig);
+      const dependency = { source: directory, sourceModule: directory, target, targetModule: target };
+      const violation = findPolicyViolation(parents, dependency, loadConfig);
       if (violation) {
         issues.push({
           message: `Cannot allow "${path.basename(target)}". ${path.relative(projectRoot, violation.filename)}: ${violation.reason}.`,
