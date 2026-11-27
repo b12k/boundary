@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { checkIsDotBoundaryFile, listModuleDirectories } from './boundary-files';
+import { checkIsDotBoundaryFile, listAncestorDirectories } from './boundary-files';
 import { createConfigLoader, findPolicyViolation, readConfigIssues } from './boundary-policies';
 import { checkIsWithin, getModulePaths, resolvePhysicalPath } from './module-paths';
 import { createRule, visitSpecifiers } from './rule';
@@ -38,26 +38,17 @@ export const useDotBoundary = createRule(
       };
     }
 
-    const modules = listModuleDirectories(sourceDirectory, projectRoot);
-    const [sourceModule] = modules;
-    const scopes = [...new Set([...modules, projectRoot])].filter((scope) => loadConfig(scope) !== undefined);
+    const directories = listAncestorDirectories(sourceDirectory, projectRoot);
+    const scopes = directories.filter((scope) => loadConfig(scope) !== undefined);
     if (scopes.length === 0) return {};
 
-    const targetModulesByDirectory = new Map<string, string | undefined>();
     return visitSpecifiers(context, (specifier, kind) => {
       const targetFile = paths.resolveTarget(specifier.value, kind === 'require');
       if (!targetFile) return;
 
       const target = resolvePhysicalPath(targetFile);
       if (!checkIsWithin(projectRoot, target)) return;
-      const directory = path.dirname(target);
-      if (!targetModulesByDirectory.has(directory)) {
-        const [module] = listModuleDirectories(directory, projectRoot);
-        targetModulesByDirectory.set(directory, module);
-      }
-      const targetModule = targetModulesByDirectory.get(directory);
-      const dependency = { source: filename, sourceModule, target, targetModule };
-      const violation = findPolicyViolation(scopes, dependency, loadConfig);
+      const violation = findPolicyViolation(scopes, filename, target, loadConfig);
       if (violation) {
         context.report({
           data: {
