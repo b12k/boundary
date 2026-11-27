@@ -147,14 +147,20 @@ function resolvePhysicalPath(filename: string) {
   }
 }
 
-const pathsBySource = new WeakMap<Rule.RuleContext['sourceCode'], ReturnType<typeof createModulePaths>>();
+// Oxlint reuses the SourceCode object across files, but each file has its own AST.
+const pathsByAst = new WeakMap<Rule.RuleContext['sourceCode']['ast'], ReturnType<typeof createModulePaths>>();
 
-function getModulePaths(context: Rule.RuleContext) {
-  const cachedPaths = pathsBySource.get(context.sourceCode);
-  if (cachedPaths) return cachedPaths;
+type ModulePathContext = Pick<Rule.RuleContext, 'cwd' | 'filename' | 'physicalFilename'> & {
+  sourceCode: Pick<Rule.RuleContext['sourceCode'], 'ast'>;
+};
 
+function getModulePaths(context: ModulePathContext): ReturnType<typeof createModulePaths> | undefined {
   const { cwd, filename: lintFilename, physicalFilename, sourceCode } = context;
-  if (lintFilename !== physicalFilename || !path.isAbsolute(physicalFilename)) return cachedPaths;
+  if (lintFilename !== physicalFilename || !path.isAbsolute(physicalFilename)) return undefined;
+
+  const { ast } = sourceCode;
+  const cachedPaths = pathsByAst.get(ast);
+  if (cachedPaths) return cachedPaths;
 
   let filename: string;
   try {
@@ -164,10 +170,10 @@ function getModulePaths(context: Rule.RuleContext) {
     filename = path.join(resolvePhysicalPath(path.dirname(physicalFilename)), path.basename(physicalFilename));
   }
   const projectRoot = resolvePhysicalPath(cwd);
-  if (checkIsDependency(filename) || !checkIsWithin(projectRoot, filename)) return cachedPaths;
+  if (checkIsDependency(filename) || !checkIsWithin(projectRoot, filename)) return undefined;
 
   const modulePaths = createModulePaths(filename, projectRoot);
-  pathsBySource.set(sourceCode, modulePaths);
+  pathsByAst.set(ast, modulePaths);
   return modulePaths;
 }
 
