@@ -39,33 +39,32 @@ export const useDotBoundary = createRule(
     }
 
     const modules = listModuleDirectories(sourceDirectory, projectRoot);
-    const [source] = modules;
-    if (!source) return {};
-
+    const [sourceModule] = modules;
     const scopes = [...new Set([...modules, projectRoot])].filter((scope) => loadConfig(scope) !== undefined);
     if (scopes.length === 0) return {};
 
-    const targetsByDirectory = new Map<string, string | undefined>();
+    const targetModulesByDirectory = new Map<string, string | undefined>();
     return visitSpecifiers(context, (specifier, kind) => {
       const targetFile = paths.resolveTarget(specifier.value, kind === 'require');
-      if (!targetFile || !checkIsWithin(projectRoot, targetFile)) return;
+      if (!targetFile) return;
 
-      const directory = resolvePhysicalPath(path.dirname(targetFile));
-      if (!targetsByDirectory.has(directory)) {
+      const target = resolvePhysicalPath(targetFile);
+      if (!checkIsWithin(projectRoot, target)) return;
+      const directory = path.dirname(target);
+      if (!targetModulesByDirectory.has(directory)) {
         const [module] = listModuleDirectories(directory, projectRoot);
-        targetsByDirectory.set(directory, module);
+        targetModulesByDirectory.set(directory, module);
       }
-      const target = targetsByDirectory.get(directory);
-      if (!target || path.relative(source, target) === '') return;
-
-      const violation = findPolicyViolation(scopes, source, target, loadConfig);
+      const targetModule = targetModulesByDirectory.get(directory);
+      const dependency = { source: filename, sourceModule, target, targetModule };
+      const violation = findPolicyViolation(scopes, dependency, loadConfig);
       if (violation) {
         context.report({
           data: {
             config: path.relative(projectRoot, violation.filename),
             reason: violation.reason,
-            source: path.basename(source),
-            target: path.basename(target),
+            source: path.basename(violation.source),
+            target: path.basename(violation.target),
           },
           messageId: 'blockedDependency',
           node: specifier,

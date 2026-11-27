@@ -11,49 +11,27 @@ Install the plugin with `pnpm add -D @b12k/boundary`.
 ```js
 import boundary from '@b12k/boundary';
 
-export default [
-  {
-    files: ['**/*.{ts,js,mjs,cjs,tsx,jsx}'],
-    plugins: { boundary },
-    rules: {
-      'boundary/barrel-reexports-only': 'error',
-      'boundary/no-deep-imports': 'error',
-      'boundary/no-empty-module': 'error',
-      'boundary/no-explicit-index': 'error',
-      'boundary/no-export-star': 'error',
-      'boundary/no-internal-barrel-imports': 'error',
-      'boundary/no-parent-reexports': 'error',
-      'boundary/no-shadowed-module-entry': 'error',
-      'boundary/no-useless-barrel': 'error',
-    },
-  },
-];
+export default [{ ...boundary.configs.recommended, files: ['**/*.{ts,js,mjs,cjs,tsx,jsx}'] }];
 ```
 
 Use the project's parser configuration for TypeScript and JSX files.
 
 ## Oxlint
 
-Add the plugin and rules to `.oxlintrc.json` or `oxlint.config.ts`.
+Extend the preset in `oxlint.config.ts`:
 
-```json
-{
-  "jsPlugins": [{ "name": "boundary", "specifier": "@b12k/boundary" }],
-  "rules": {
-    "boundary/barrel-reexports-only": "error",
-    "boundary/no-deep-imports": "error",
-    "boundary/no-empty-module": "error",
-    "boundary/no-explicit-index": "error",
-    "boundary/no-export-star": "error",
-    "boundary/no-internal-barrel-imports": "error",
-    "boundary/no-parent-reexports": "error",
-    "boundary/no-shadowed-module-entry": "error",
-    "boundary/no-useless-barrel": "error"
-  }
-}
+```ts
+import { oxlintRecommended } from '@b12k/boundary';
+import { defineConfig } from 'oxlint';
+
+export default defineConfig({ extends: [oxlintRecommended] });
 ```
 
+For `.oxlintrc.json`, register `{"name": "boundary", "specifier": "@b12k/boundary"}` in `jsPlugins` and enable individual rules in `rules`.
+
 ## Rules
+
+The `recommended` preset enables every rule below at `error` except `boundary/require-dot-boundary`, which you can enable explicitly.
 
 | Rule                         | Behavior                                                                                                                                                                                    |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -66,6 +44,8 @@ Add the plugin and rules to `.oxlintrc.json` or `oxlint.config.ts`.
 | `no-parent-reexports`        | Keeps an index's local re-exports inside its directory. Reports re-exports from sibling or parent directories.                                                                              |
 | `no-shadowed-module-entry`   | Reports `utils/index.ts` when a sibling such as `utils.ts` can shadow the directory import.                                                                                                 |
 | `no-useless-barrel`          | Reports an index that only re-exports the sole same-name implementation file in its directory. Supporting files such as `utils.test.ts` and `utils.css` keep the directory structure valid. |
+| `require-dot-boundary`       | Reports a module's index when its directory has no `.boundary.*` file of its own.                                                                                                           |
+| `use-dot-boundary`           | Validates `.boundary.*` files and reports forbidden dependencies at the import or re-export.                                                                                                |
 
 💡 It also understands aliases like `@/users` from `tsconfig.json`.
 
@@ -73,14 +53,7 @@ For CommonJS files, Boundary checks literal `require()` calls and direct re-expo
 
 ## Module policies
 
-Enable either rule in the `rules` section of your ESLint or Oxlint config.
-
-| Rule                            | Behavior                                                                                     |
-| ------------------------------- | -------------------------------------------------------------------------------------------- |
-| `boundary/use-dot-boundary`     | Validates `.boundary.*` files and reports forbidden dependencies at the import or re-export. |
-| `boundary/require-dot-boundary` | Reports a module's index when its directory has no `.boundary.*` file of its own.            |
-
-Place one `.boundary.{ts,js,mjs,cjs,tsx,jsx}` file beside a module's index. A config at the project root can describe top-level modules without a root index.
+Place one `.boundary.{ts,js,mjs,cjs,tsx,jsx}` file beside a module's index. A config at the project root can describe top-level files and folders without a root index.
 
 ```ts
 // users/.boundary.ts
@@ -88,7 +61,7 @@ import { defineBoundary } from '@b12k/boundary';
 
 export default defineBoundary({
   imports: { allow: ['../shared'] },
-  layers: ['repository', ['service', 'events'], 'controller'],
+  layers: ['repository', ['service', 'events.ts'], 'controller'],
   hierarchy: { controller: ['service'] },
 });
 ```
@@ -96,8 +69,10 @@ export default defineBoundary({
 For CommonJS, use `const { defineBoundary } = require('@b12k/boundary')` and `module.exports = defineBoundary({ … })`. The linter reads the object literal statically.
 
 - **`imports`** applies to dependencies that leave the module's subtree. `allow` permits only the listed modules, while `deny` blocks only the listed modules. Paths are relative to the config file and can use TypeScript aliases.
-- **`layers`** applies to named direct child modules. Higher layers can use lower layers. Children on the same layer cannot import each other.
+- **`layers`** applies to named direct child files and folders. Higher layers can use lower layers. Children on the same layer cannot import each other.
 - **`hierarchy`** lists which direct siblings a named child can use. A child with an empty target list cannot import any of its siblings. An omitted source has no additional hierarchy restriction.
+
+Use exact names such as `controller.ts` or `service`. Files are named with their extensions, and a folder covers all descendants even if it has no `index.*`. To refer to `service/internal/load.ts`, list `service`.
 
 Policies apply together. In the example, a file deep inside `controller` can import `service`, but importing `repository` violates `hierarchy` even though `layers` permits that direction. The public-index rules still govern which files those imports can target.
 
