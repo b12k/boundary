@@ -90,9 +90,15 @@ function createModulePaths(filename: string, projectRoot: string) {
     tsconfig: tsconfig ? { configFile: tsconfig.path, references: 'auto' } : 'auto',
   };
   const resolver = new ResolverFactory(resolverOptions);
+  let directoryResolver: ResolverFactory | undefined;
   let requireResolver: ResolverFactory | undefined;
   const targetsBySpecifier = new Map<string, string | undefined>();
   const moduleStatusByDirectory = new Map<string, boolean>();
+
+  function resolveDirectory(specifier: string) {
+    directoryResolver ??= resolver.cloneWithOptions({ ...resolverOptions, resolveToContext: true });
+    return directoryResolver.resolveFileSync(filename, specifier).path;
+  }
 
   function resolveTarget(specifier: string, isRequire = false) {
     const request = isRequire ? `require:${specifier}` : `import:${specifier}`;
@@ -134,6 +140,7 @@ function createModulePaths(filename: string, projectRoot: string) {
     filename,
     findEntryBoundary,
     projectRoot,
+    resolveDirectory,
     resolveTarget,
     sourceDirectory,
   };

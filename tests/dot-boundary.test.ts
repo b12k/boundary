@@ -74,13 +74,12 @@ describe('dependency policies', () => {
     expect(lint('use-dot-boundary', 'src/users/service/api/index.ts', "import '../internal';")).toEqual([]);
   });
 
-  it('enforces layers and hierarchy between files and folders in the same module', async () => {
+  it('enforces layers and hierarchy between files and folders without an index beside the config', async () => {
     const config = `export default defineBoundary({
       layers: ['utils.ts', 'services', 'routes.ts'],
       hierarchy: { 'routes.ts': ['services'], services: ['utils.ts'] },
     });`;
     await Promise.all([
-      writeFixture('src/mixed/index.ts', ''),
       writeFixture('src/mixed/utils.ts', ''),
       writeFixture('src/mixed/services/deep/load.ts', ''),
       writeFixture('src/mixed/services/format.ts', ''),
@@ -109,17 +108,39 @@ describe('dependency policies', () => {
     expect(messages[0]?.message).toContain('layers forbids');
   });
 
-  it('accepts the nearest config scope and applies deny only to listed dependencies', async () => {
+  it('applies imports.deny to individual files and folder descendants', async () => {
+    const config = "module.exports = defineBoundary({ imports: { deny: ['../entry.ts', '@/legacy'] } });";
     await Promise.all([
-      writeFixture('src/sandbox/index.ts', ''),
-      writeFixture(
-        'src/sandbox/.boundary.cjs',
-        "module.exports = defineBoundary({ imports: { deny: ['../shared'] } });",
-      ),
+      writeFixture('src/entry.ts', ''),
+      writeFixture('src/legacy/deep/run.ts', ''),
+      writeFixture('src/legacy-extra/run.ts', ''),
+      writeFixture('src/sandbox/load.ts', ''),
+      writeFixture('src/sandbox/.boundary.cjs', config),
     ]);
-    const messages = lint('use-dot-boundary', 'src/sandbox/index.ts', "import '../shared';");
+    expect(lint('use-dot-boundary', 'src/sandbox/.boundary.cjs', config)).toEqual([]);
+    const messages = lint('use-dot-boundary', 'src/sandbox/load.ts', "import '../legacy/deep/run';");
     expect(messages[0]?.message).toContain('imports.deny');
-    expect(lint('use-dot-boundary', 'src/sandbox/index.ts', "import '../analytics';")).toEqual([]);
+    const [fileImport] = lint('use-dot-boundary', 'src/sandbox/load.ts', "import '../entry';");
+    expect(fileImport?.message).toContain('"sandbox" cannot depend on "entry.ts"');
+    expect(lint('use-dot-boundary', 'src/sandbox/load.ts', "import '../legacy-extra/run';")).toEqual([]);
+  });
+
+  it('allows folder descendants and exact files outside the policy directory', async () => {
+    const config = "export default defineBoundary({ imports: { allow: ['../utilities', '@/assets/format.ts'] } });";
+    const filename = 'src/consumer/load.ts';
+    await Promise.all([
+      writeFixture('src/consumer/.boundary.ts', config),
+      writeFixture('src/consumer/load.ts', ''),
+      writeFixture('src/utilities/deep/find.ts', ''),
+      writeFixture('src/assets/format.ts', ''),
+      writeFixture('src/assets/parse.ts', ''),
+    ]);
+    expect(lint('use-dot-boundary', 'src/consumer/.boundary.ts', config)).toEqual([]);
+    expect(lint('use-dot-boundary', filename, "import '@/utilities/deep/find';")).toEqual([]);
+    expect(lint('use-dot-boundary', filename, "import '../assets/format';")).toEqual([]);
+    const [blocked] = lint('use-dot-boundary', filename, "import '../assets/parse';");
+    expect(blocked?.message).toContain('imports.allow');
+    expect(lint('require-dot-boundary', 'src/utilities/deep/find.ts', '')).toEqual([]);
   });
 });
 
@@ -154,6 +175,19 @@ describe('boundary config files', () => {
     expect(messages[0]?.message).toContain('hierarchy does not allow');
     expect(messages[0]?.line).toBe(2);
     expect(messages[0]?.column).toBe(22);
+  });
+
+  it('checks parent conflicts and outgoing imports when neither policy folder has an index', async () => {
+    const filename = 'tools/feature/.boundary.ts';
+    const config = "export default defineBoundary({ imports: { allow: ['../../src/shared'] } });";
+    await Promise.all([
+      writeFixture('tools/.boundary.ts', 'export default defineBoundary({ imports: { allow: [] } });'),
+      writeFixture(filename, config),
+      writeFixture('tools/feature/load.ts', ''),
+    ]);
+    expect(lint('use-dot-boundary', filename, config)[0]?.message).toContain('Cannot allow "shared"');
+    const [blocked] = lint('use-dot-boundary', 'tools/feature/load.ts', "import '../../src/shared';");
+    expect(blocked?.message).toContain(`${path.join('tools', '.boundary.ts')}: imports.allow`);
   });
 
   it('reports non-literal values, nested layer names and conflicting policies', () => {
@@ -197,14 +231,11 @@ describe('boundary config files', () => {
   it('reads the config statically and exposes a typed defineBoundary helper', async () => {
     const config = { imports: { allow: [] } };
     expect(defineBoundary(config)).toBe(config);
-    await Promise.all([
-      writeFixture('src/static/index.ts', ''),
-      writeFixture(
-        'src/static/.boundary.ts',
-        "throw new Error('Executing this config is a bug'); export default defineBoundary({ imports: { allow: [] } });",
-      ),
-    ]);
-    const messages = lint('use-dot-boundary', 'src/static/index.ts', "import '../shared';");
+    await writeFixture(
+      'src/static/.boundary.ts',
+      "throw new Error('Executing this config is a bug'); export default defineBoundary({ imports: { allow: [] } });",
+    );
+    const messages = lint('use-dot-boundary', 'src/static/load.ts', "import '../shared';");
     expect(messages[0]?.message).toContain('imports.allow');
   });
 });
@@ -229,9 +260,8 @@ it('reports config and dependency violations with the Oxlint preset', async () =
   const plugin = path.join(project, 'src/index.ts');
   const pluginUrl = pathToFileURL(plugin).href;
   await Promise.all([
-    writeFixture('src/oxlint/configured/index.ts', "export { feature } from '../unconfigured';"),
+    writeFixture('src/oxlint/configured/feature.ts', "export { feature } from '../unconfigured';"),
     writeFixture('src/oxlint/configured/.boundary.ts', 'export default defineBoundary({ imports: { allow: [] } });'),
-    writeFixture('src/oxlint/invalid/index.ts', ''),
     writeFixture('src/oxlint/invalid/.boundary.ts', 'export default defineBoundary({ imports: { allow: 7 } });'),
     writeFixture('src/oxlint/unconfigured/index.ts', ''),
     writeFixture(
@@ -264,6 +294,6 @@ export default {
   });
 
   expect(stdout).toContain('imports.allow forbids this dependency');
-  expect(stdout).toContain('Expected an array of module paths');
+  expect(stdout).toContain('Expected an array of target paths');
   expect(stdout).not.toContain('Add a .boundary config beside this module index');
 });

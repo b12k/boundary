@@ -5,15 +5,8 @@ import path from 'node:path';
 import type { ConfigIssue, ModulePolicy } from './boundary-config';
 
 import { checkViolatesLayers, readBoundaryConfig } from './boundary-config';
-import { listDotBoundaryFiles, listModuleDirectories } from './boundary-files';
-import { checkHasIndex, checkIsWithin } from './module-paths';
-
-interface Dependency {
-  source: string;
-  sourceModule: string | undefined;
-  target: string;
-  targetModule: string | undefined;
-}
+import { listAncestorDirectories, listDotBoundaryFiles } from './boundary-files';
+import { checkIsWithin } from './module-paths';
 
 type LoadConfig = (directory: string) => LoadedConfig | undefined;
 
@@ -63,18 +56,22 @@ function getChildPath(directory: string, entry: string) {
   return name ? path.join(directory, name) : undefined;
 }
 
-function findPolicyViolation(scopes: Array<string>, dependency: Dependency, loadConfig: LoadConfig) {
+function findPolicyViolation(scopes: Array<string>, sourcePath: string, targetPath: string, loadConfig: LoadConfig) {
   let violation: undefined | { filename: string; reason: string; source: string; target: string };
   for (const scope of scopes) {
-    const isOutgoing = !checkIsWithin(scope, dependency.target);
-    const source = isOutgoing ? dependency.sourceModule : getChildPath(scope, dependency.source);
-    const target = isOutgoing ? dependency.targetModule : getChildPath(scope, dependency.target);
+    const isOutgoing = !checkIsWithin(scope, targetPath);
+    const source = isOutgoing ? scope : getChildPath(scope, sourcePath);
+    const target = isOutgoing ? targetPath : getChildPath(scope, targetPath);
     if (source && target && path.relative(source, target) !== '') {
       const loaded = loadConfig(scope);
       let reason = loaded?.issue && `invalid config: ${loaded.issue}`;
       if (loaded?.policy) {
         const { imports } = loaded.policy;
-        if (isOutgoing && imports && imports.modules.has(target) !== (imports.kind === 'allow')) {
+        if (
+          isOutgoing &&
+          imports &&
+          imports.entries.keys().some((entry) => checkIsWithin(entry, target)) !== (imports.kind === 'allow')
+        ) {
           reason = `imports.${imports.kind} forbids this dependency`;
         } else if (!isOutgoing) {
           reason = findChildPolicyViolation(loaded.policy, source, target);
@@ -89,10 +86,6 @@ function findPolicyViolation(scopes: Array<string>, dependency: Dependency, load
   return violation;
 }
 
-function getPolicyScopes(directory: string, projectRoot: string) {
-  return [...new Set([...listModuleDirectories(directory, projectRoot), projectRoot])];
-}
-
 function readConfigIssues(filename: string, text: string, projectRoot: string, loadConfig: LoadConfig) {
   const directory = path.dirname(filename);
   const fileSpan = { end: 0, start: 0 };
@@ -104,18 +97,13 @@ function readConfigIssues(filename: string, text: string, projectRoot: string, l
       span: fileSpan,
     });
   }
-  if (path.relative(projectRoot, directory) !== '' && !checkHasIndex(directory)) {
-    issues.push({ message: 'Place this config beside a module index or at the project root.', span: fileSpan });
-  }
-
   const parsed = readBoundaryConfig(filename, text, projectRoot);
   issues.push(...parsed.issues);
   const { imports } = parsed.policy;
   if (issues.length === 0 && imports?.kind === 'allow') {
-    const parents = getPolicyScopes(directory, projectRoot).filter((scope) => path.relative(scope, directory) !== '');
-    for (const [target, span] of imports.modules) {
-      const dependency = { source: directory, sourceModule: directory, target, targetModule: target };
-      const violation = findPolicyViolation(parents, dependency, loadConfig);
+    const [, ...parents] = listAncestorDirectories(directory, projectRoot);
+    for (const [target, span] of imports.entries) {
+      const violation = findPolicyViolation(parents, directory, target, loadConfig);
       if (violation) {
         issues.push({
           message: `Cannot allow "${path.basename(target)}". ${path.relative(projectRoot, violation.filename)}: ${violation.reason}.`,

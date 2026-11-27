@@ -4,14 +4,7 @@ import path from 'node:path';
 import { parseSync } from 'oxc-parser';
 
 import { findChildEntry } from './boundary-files';
-import {
-  checkHasIndex,
-  checkIsDependency,
-  checkIsIndexFile,
-  checkIsWithin,
-  createModulePaths,
-  resolvePhysicalPath,
-} from './module-paths';
+import { checkIsDependency, checkIsWithin, createModulePaths, resolvePhysicalPath } from './module-paths';
 
 interface ConfigIssue {
   message: string;
@@ -19,8 +12,8 @@ interface ConfigIssue {
 }
 
 interface ImportsPolicy {
+  entries: References;
   kind: 'allow' | 'deny';
-  modules: References;
 }
 interface ModulePolicy {
   hierarchy: Map<string, References>;
@@ -32,7 +25,7 @@ type References = Map<string, Span>;
 
 interface ReferenceScope {
   expected: string;
-  kind: 'child' | 'module';
+  kind: 'child' | 'target';
   resolve: (specifier: string) => string | undefined;
 }
 
@@ -178,7 +171,7 @@ function readImports(node: Expression, scope: ReferenceScope, issues: Array<Conf
   const [kind] = fields.keys();
   if (fields.size === 1 && (kind === 'allow' || kind === 'deny')) {
     const field = fields.get(kind);
-    if (field) imports = { kind, modules: readReferenceArray(field.value, scope, issues) };
+    if (field) imports = { entries: readReferenceArray(field.value, scope, issues), kind };
   } else if (node.type === 'ObjectExpression') {
     issues.push({ message: 'Set exactly one of imports.allow or imports.deny.', span: node });
   }
@@ -220,18 +213,10 @@ function readBoundaryConfig(filename: string, text: string, projectRoot: string)
   if (!object) return { issues, policy };
 
   let paths: ReturnType<typeof createModulePaths> | undefined;
-  function resolveEntryPoint(specifier: string) {
-    paths ??= createModulePaths(filename, projectRoot);
-    const target = paths.resolveTarget(specifier);
-    return target && checkIsIndexFile(target) ? path.dirname(resolvePhysicalPath(target)) : undefined;
-  }
-
   function resolveImport(specifier: string) {
-    const isRelative =
-      specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../');
-    const relativeDirectory = isRelative ? resolvePhysicalPath(path.resolve(directory, specifier)) : undefined;
-    const target =
-      relativeDirectory && checkHasIndex(relativeDirectory) ? relativeDirectory : resolveEntryPoint(specifier);
+    paths ??= createModulePaths(filename, projectRoot);
+    const resolved = paths.resolveDirectory(specifier) ?? paths.resolveTarget(specifier);
+    const target = resolved && resolvePhysicalPath(resolved);
     return target &&
       !checkIsDependency(target) &&
       checkIsWithin(projectRoot, target) &&
@@ -241,8 +226,8 @@ function readBoundaryConfig(filename: string, text: string, projectRoot: string)
   }
 
   const importScope: ReferenceScope = {
-    expected: "an existing module with an index in this policy's scope",
-    kind: 'module',
+    expected: 'an existing project file or directory outside this policy’s directory tree',
+    kind: 'target',
     resolve: resolveImport,
   };
   const childScope: ReferenceScope = {

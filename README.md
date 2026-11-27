@@ -15,6 +15,11 @@
 
 ## How it works
 
+- **Dependency policies** define which dependencies are allowed. A [`.boundary.*` file](#module-policies) can govern a directory and its descendants even if the directory has no `index.*`.
+- **Public API rules** define where imports can enter a module. Code outside a module imports it through its public `index.*` instead of reaching into its implementation.
+
+Enable either independently, or use the [recommended preset](#recommended-preset) for both.
+
 <p align="center">
   <img src="./assets/boundary-layers.svg" alt="Imports cross module boundaries through public entry points and follow the allowed direction between sibling modules." width="672" />
 </p>
@@ -117,7 +122,7 @@ See the [rule reference](#rules) for what each rule checks. The JSON includes th
 |                     | `@b12k/boundary`                                              | [JS Boundaries (`eslint-plugin-boundaries`)](https://www.jsboundaries.dev/docs/overview/)         |
 | ------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | Module discovery    | Directories with an `index` file                              | Configurable patterns for elements and files                                                      |
-| Policy location     | `.boundary.*` next to a module or at the project root         | Classification and dependency policies in the linter config                                       |
+| Policy location     | `.boundary.*` in any project directory                        | Classification and dependency policies in the linter config                                       |
 | Public entry points | The module's `index` by convention                            | Configurable entry-point paths through dependency selectors                                       |
 | Dependency rules    | Import allow/deny lists, ordered layers, and sibling policies | Selectors for elements, files, and dependency metadata                                            |
 | Barrel rules        | Dedicated rules for writing and importing index files         | No dedicated barrel-organization rules                                                            |
@@ -125,7 +130,7 @@ See the [rule reference](#rules) for what each rule checks. The JSON includes th
 
 ## Module policies
 
-Place one `.boundary.{ts,js,mjs,cjs,tsx,jsx}` file beside a module's index. A config at the project root can describe top-level files and folders without a root index.
+Place one `.boundary.{ts,js,mjs,cjs,tsx,jsx}` file in any project directory, with or without an `index.*`. Its policies apply to that directory and its descendants.
 
 ```ts
 // users/.boundary.ts
@@ -138,7 +143,7 @@ export default defineBoundary({
 });
 ```
 
-- **`imports`** controls dependencies outside the module's subtree. `allow` permits only the listed modules; `deny` blocks only those listed. Use paths relative to the config or `tsconfig.json` aliases, which Boundary also resolves in source imports.
+- **`imports`** controls local project dependencies outside the config's directory tree. `allow` permits only the listed files and folders; `deny` blocks only those listed. A folder covers all its descendants. Use paths relative to the config or `tsconfig.json` aliases.
 - **`layers`** orders children from lowest to highest. A child can import from lower layers. Children on the same layer cannot import each other.
 - **`hierarchy`** lists which siblings a child can import. Use an empty list to block all sibling imports or omit the child to leave its sibling imports unrestricted by `hierarchy`.
 
