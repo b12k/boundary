@@ -16,7 +16,7 @@
 ## How it works
 
 <p align="center">
-  <img src="./assets/boundary-layers.svg" alt="Imports cross module boundaries through public entry points and follow the allowed direction between sibling modules." width="660" />
+  <img src="./assets/boundary-layers.svg" alt="Imports cross module boundaries through public entry points and follow the allowed direction between sibling modules." width="672" />
 </p>
 
 ```text
