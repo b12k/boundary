@@ -137,7 +137,7 @@ Place one `.boundary.{ts,js,mjs,cjs,tsx,jsx}` file in any project directory, wit
 import { defineBoundary } from '@b12k/boundary';
 
 export default defineBoundary({
-  imports: { allow: ['../shared'] },
+  imports: { allow: ['../shared', '../config/locale.ts'] },
   layers: ['repository', ['service', 'events.ts'], 'controller'],
   hierarchy: { controller: ['service'] },
 });
@@ -152,6 +152,17 @@ export default defineBoundary({
 Dependencies must satisfy every applicable policy and the public entry-point rules.
 
 For CommonJS, use `const { defineBoundary } = require('@b12k/boundary')` and `module.exports = defineBoundary({ … })`. The linter reads the object literal statically.
+
+### Denylist alternative
+
+Use `deny` in place of `allow` to block a folder and a specific file:
+
+```ts
+// users/.boundary.ts
+import { defineBoundary } from '@b12k/boundary';
+
+export default defineBoundary({ imports: { deny: ['../legacy', '../config/experimental.ts'] } });
+```
 
 ## Rules
 
